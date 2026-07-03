@@ -65,7 +65,7 @@ btnCam.addEventListener('click', async () => {
 
 // Режим загрузки файла
 fileLoad.addEventListener('change', (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files;
     if (!file) return;
     
     const reader = new FileReader();
@@ -114,11 +114,11 @@ function runPipeline() {
 
     // Цикл пространственного распределения по сфирали
     for (let i = 0; i < density; i++) {
-        // Проекция шага итерации на ось сфирального времени s
-        let s = (i - density / 2) / (density / 7);
+        // Шаг t строго от -1.0 до +1.0 для корректной развертки
+        let t = (i / (density - 1)) * 2 - 1;
 
-        // Получение 3D точки из математического ядра
-        const voxel = SfiralCore.getVoxelPoint(s, sTime);
+        // Получение точной 3D точки Сфирали из обновленного математического ядра автора
+        const voxel = SfiralCore.getVoxelPoint(t, sTime);
 
         // Проекция 3D -> 2D экрана
         const radiusScale = Math.min(canvas.width, canvas.height) / 3.4;
@@ -146,7 +146,7 @@ function runPipeline() {
             a = brightness / 255;
         } else {
             // Цвета по умолчанию из демо-каркаса
-            const demoColor = SfiralCore.getDemoColor(s);
+            const demoColor = SfiralCore.getDemoColor(t);
             r = demoColor.r; g = demoColor.g; b = demoColor.b; a = demoColor.a;
         }
 
