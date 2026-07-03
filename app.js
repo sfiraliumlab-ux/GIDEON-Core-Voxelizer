@@ -55,23 +55,6 @@ canvas.addEventListener('mousemove', (e) => {
     previousMousePosition = { x: e.clientX, y: e.clientY };
 });
 
-canvas.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 1) {
-        isDragging = true;
-        previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        autoRotateSpeed = 0;
-    }
-});
-canvas.addEventListener('touchend', () => { isDragging = false; });
-canvas.addEventListener('touchmove', (e) => {
-    if (!isDragging || e.touches.length !== 1) return;
-    const deltaX = e.touches[0].clientX - previousMousePosition.x;
-    const deltaY = e.touches[0].clientY - previousMousePosition.y;
-    userRotation.y += deltaX * 0.01;
-    userRotation.x += deltaY * 0.01;
-    previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-});
-
 // --- ОБРАБОТЧИКИ ПОТОКОВ ДАННЫХ ---
 
 function setMode(modeName, labelText) {
@@ -94,10 +77,18 @@ btnDemo.addEventListener('click', () => {
 
 btnCam.addEventListener('click', async () => {
     try {
-        // Снимаем ограничения CORS безопасности с тега видео
-        webcam.crossOrigin = "anonymous";
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 160, height: 120 } });
+        // Запрос видеопотока с жестким указанием флагов доверия
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: 160, height: 120, facingMode: "user" } 
+        });
+        
         webcam.srcObject = stream;
+        // Принудительно отключаем блокировки на теге видео
+        webcam.setAttribute('playsinline', true);
+        webcam.setAttribute('muted', true);
+        webcam.crossOrigin = "anonymous";
+        webcam.play();
+
         webcam.style.display = 'block';
         bufferCanvas.style.display = 'none';
         setMode('camera', 'sensor_stream');
@@ -108,7 +99,7 @@ btnCam.addEventListener('click', async () => {
 });
 
 fileLoad.addEventListener('change', (e) => {
-    const file = e.target.files[0]; // Исправлен захват конкретного файла новичка
+    const file = e.target.files[0]; 
     if (!file) return;
     
     const reader = new FileReader();
@@ -146,20 +137,16 @@ function runPipeline() {
 
     let pixelData = null;
     
-    // Защищенное и стабильное извлечение пикселей веб-камеры/файла в каждом кадре
-    try {
-        if (currentMode === 'camera' && webcam.readyState >= 2) { // 2 означает HAVE_CURRENT_DATA или выше
-            bCtx.clearRect(0, 0, 160, 120);
-            bCtx.drawImage(webcam, 0, 0, 160, 120);
-            pixelData = bCtx.getImageData(0, 0, 160, 120).data;
-        } else if (currentMode === 'file' && loadedImgElement) {
-            bCtx.clearRect(0, 0, 160, 120);
-            bCtx.drawImage(loadedImgElement, 0, 0, 160, 120);
-            pixelData = bCtx.getImageData(0, 0, 160, 120).data;
-        }
-    } catch (e) {
-        // Защита от сбоев CORS в браузере
-        pixelData = null;
+    // БЕЗОПАСНЫЙ ПЕРЕХАТ ПИКСЕЛЕЙ ЧЕРЕЗ АКТИВНЫЙ БУФЕР КАНАЛА
+    if (currentMode === 'camera' && webcam.readyState >= 2) { 
+        bCtx.clearRect(0, 0, 160, 120);
+        // Рисуем кадр в буфер (это очищает статус безопасности потока)
+        bCtx.drawImage(webcam, 0, 0, 160, 120);
+        pixelData = bCtx.getImageData(0, 0, 160, 120).data;
+    } else if (currentMode === 'file' && loadedImgElement) {
+        bCtx.clearRect(0, 0, 160, 120);
+        bCtx.drawImage(loadedImgElement, 0, 0, 160, 120);
+        pixelData = bCtx.getImageData(0, 0, 160, 120).data;
     }
 
     let activeVoxels = 0;
@@ -176,9 +163,10 @@ function runPipeline() {
 
         let r, g, b, a;
 
-        // Если пиксели успешно считались, накладываем их на Сфираль
-        if (pixelData && pixelData.length > 0) {
-            let u = Math.floor(((voxel.x + currentR) / (currentR * 2)) * 160);
+        // Если буфер пикселей существует и он не пустой (проверка на Tainted Canvas)
+        if (pixelData && pixelData[0] !== undefined) {
+            // Зеркально разворачиваем U координату, чтобы движения камеры были интуитивными (как в зеркале)
+            let u = Math.floor(((currentR - voxel.x) / (currentR * 2)) * 160);
             let v = Math.floor(((voxel.y + currentR) / (currentR * 2)) * 120);
             
             u = Math.max(0, Math.min(159, u));
@@ -188,32 +176,34 @@ function runPipeline() {
             r = pixelData[idx];
             g = pixelData[idx + 1];
             b = pixelData[idx + 2];
+            a = pixelData[idx + 3] / 255;
             
+            // Если пиксель слишком темный, даем легкий базовый силуэт, чтобы нить не исчезала
             const brightness = (r + g + b) / 3;
-            a = brightness / 255;
+            if (brightness < 15) {
+                const demoColor = SfiralCore.getDemoColor(t);
+                r = demoColor.r; g = demoColor.g; b = demoColor.b; a = 0.2; // Полупрозрачный каркас в темноте
+            }
         } else {
-            // Иначе — канонический демонстрационный градиент автора
+            // Демонстрационный градиент
             const demoColor = SfiralCore.getDemoColor(t);
             r = demoColor.r; g = demoColor.g; b = demoColor.b; a = demoColor.a;
         }
 
         if (a > 0.05) {
             gl.beginPath();
-            let size = 3.5; 
-            gl.arc(screenX, screenY, size, 0, 2 * Math.PI);
+            gl.arc(screenX, screenY, 3.5, 0, 2 * Math.PI);
             gl.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
             gl.fill();
 
             gl.shadowBlur = 8;
-            gl.shadowColor = `rgba(${r}, ${g}, ${b}, 0.5)`;
-            
+            gl.shadowColor = `rgba(${r}, ${g}, ${b}, 0.4)`;
             activeVoxels++;
         }
     }
 
     gl.shadowBlur = 0;
     document.getElementById('telCount').innerText = activeVoxels;
-    document.getElementById('sysStatus').innerText = isDragging ? "СТАТУС: ИНТЕРАКТИВНЫЙ АНАЛИЗ МАТРИЦЫ" : "СТАТУС: СФИРАЛЬНАЯ АДРЕСАЦИЯ АКТИВНА";
     
     requestAnimationFrame(runPipeline);
 }
