@@ -1,5 +1,5 @@
 /**
- * GIDEON Core Voxelize — Главный координатор приложения
+ * GIDEON Core Voxelize — Главный координатор приложения c 3D-интерактивностью
  */
 
 // Селекторы элементов DOM
@@ -17,9 +17,15 @@ const rngDensity = document.getElementById('rngDensity');
 const rngSqueeze = document.getElementById('rngSqueeze');
 
 // Состояние приложения
-let currentMode = 'demo'; // demo, camera, file
+let currentMode = 'demo'; 
 let sTime = 0;
 let loadedImgElement = null;
+
+// ПЕРЕМЕННЫЕ ДЛЯ 3D ИНТЕРАКТИВА (МЫШЬ И ТАЧ)
+let isDragging = false;
+let previousMousePosition = { x: 0, y: 0 };
+let userRotation = { x: 0.3, y: 0 }; // Стартовый угол наклона для красивого объема
+let autoRotateSpeed = 0.006; // Скорость авто-вращения
 
 // Синхронизация размеров холста
 function initViewport() {
@@ -29,6 +35,56 @@ function initViewport() {
 window.addEventListener('resize', initViewport);
 initViewport();
 
+// --- СИСТЕМА УПРАВЛЕНИЯ КАДРОМ (MOUSE & TOUCH TRACKING) ---
+
+canvas.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    previousMousePosition = { x: e.clientX, y: e.clientY };
+    autoRotateSpeed = 0; // Останавливаем авто-вращение при ручном просмотре
+});
+
+window.addEventListener('mouseup', () => {
+    isDragging = false;
+});
+
+canvas.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+
+    const deltaX = e.clientX - previousMousePosition.x;
+    const deltaY = e.clientY - previousMousePosition.y;
+
+    // Переводим движение мыши в радианы поворота
+    userRotation.y += deltaX * 0.01;
+    userRotation.x += deltaY * 0.01;
+
+    // Ограничиваем вертикальный переворот, чтобы голова не кружилась (в пределах 85 градусов)
+    userRotation.x = Math.max(-1.4, Math.min(1.4, userRotation.x));
+
+    previousMousePosition = { x: e.clientX, y: e.clientY };
+});
+
+// Поддержка мобильных экранов (тач-события)
+canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+        isDragging = true;
+        previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        autoRotateSpeed = 0;
+    }
+});
+
+canvas.addEventListener('touchend', () => { isDragging = false; });
+
+canvas.addEventListener('touchmove', (e) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    const deltaX = e.touches[0].clientX - previousMousePosition.x;
+    const deltaY = e.touches[0].clientY - previousMousePosition.y;
+    userRotation.y += deltaX * 0.01;
+    userRotation.x += deltaY * 0.01;
+    userRotation.x = Math.max(-1.4, Math.min(1.4, userRotation.x));
+    previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+});
+
+
 // --- ОБРАБОТЧИКИ ПОТОКОВ ДАННЫХ ---
 
 function setMode(modeName, labelText) {
@@ -36,9 +92,10 @@ function setMode(modeName, labelText) {
     document.getElementById('telMode').innerText = labelText.toUpperCase();
     document.querySelectorAll('.gideon-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('sysStatus').innerText = `СТАТУС: ПОТОК [${labelText.toUpperCase()}]`;
+    // Возвращаем легкое авто-вращение при переключении режимов
+    autoRotateSpeed = 0.006;
 }
 
-// Режим демонстрации
 btnDemo.addEventListener('click', () => {
     setMode('demo', 'synthetic_pattern');
     btnDemo.classList.add('active');
@@ -49,7 +106,6 @@ btnDemo.addEventListener('click', () => {
     }
 });
 
-// Режим веб-камеры
 btnCam.addEventListener('click', async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 160, height: 120 } });
@@ -63,9 +119,8 @@ btnCam.addEventListener('click', async () => {
     }
 });
 
-// Режим загрузки файла
 fileLoad.addEventListener('change', (e) => {
-    const file = e.target.files[0]; // Исправлено для корректного захвата одного файла
+    const file = e.target.files[0]; 
     if (!file) return;
     
     const reader = new FileReader();
@@ -75,7 +130,6 @@ fileLoad.addEventListener('change', (e) => {
             loadedImgElement = img;
             bufferCanvas.style.display = 'block';
             webcam.style.display = 'none';
-            // Отрисовываем картинку во внутренний буфер
             bCtx.clearRect(0, 0, 160, 120);
             bCtx.drawImage(img, 0, 0, 160, 120);
             setMode('file', 'file_buffer');
@@ -88,7 +142,6 @@ fileLoad.addEventListener('change', (e) => {
 // --- ГЛАВНЫЙ ЦИКЛ РЕНДЕРИНГА И ДЕКОМПОЗИЦИИ ---
 
 function runPipeline() {
-    // Очистка экрана перед новым кадром
     gl.clearRect(0, 0, canvas.width, canvas.height);
     
     const cx = canvas.width / 2;
@@ -96,52 +149,47 @@ function runPipeline() {
     const density = parseInt(rngDensity.value);
     const squeeze = parseInt(rngSqueeze.value) / 10;
     
-    // Интеграция значений с ползунков управления
     document.getElementById('txtDensity').innerText = density;
     document.getElementById('txtSqueeze').innerText = squeeze.toFixed(1);
 
-    // Вращение Сфирали по фазе времени
-    sTime += 0.006;
+    // Прибавляем время только если включено авто-вращение
+    sTime += autoRotateSpeed;
     document.getElementById('telTime').innerText = sTime.toFixed(4);
 
-    // Получение растровых данных из буферов ввода
     let pixelData = null;
     if (currentMode === 'camera' && webcam.readyState === webcam.HAVE_CURRENT_DATA) {
         bCtx.drawImage(webcam, 0, 0, 160, 120);
         pixelData = bCtx.getImageData(0, 0, 160, 120).data;
     } else if (currentMode === 'file' && loadedImgElement) {
-        // Постоянно обновляем буфер кадра для стабильного считывания
         bCtx.drawImage(loadedImgElement, 0, 0, 160, 120);
         pixelData = bCtx.getImageData(0, 0, 160, 120).data;
     }
 
     let activeVoxels = 0;
-
-    // Считываем радиус из математического ядра (по умолчанию 1.8)
     const currentR = SfiralCore.R_coil || 1.8;
 
-    // Генерация дискретных пространственных вокселей Сфирали
+    // Генерируем массив точек
     for (let i = 0; i < density; i++) {
-        // Шаг t строго от -1.0 до +1.0 для корректной развертки
         let t = (i / (density - 1)) * 2 - 1;
 
-        // Вызов подлинной сфиральной точки из математического ядра
-        const voxel = SfiralCore.getVoxelPoint(t, sTime);
+        // ПЕРЕДАЕМ НАШИ КООРДИНАТЫ МЫШИ В ЯДРО ДЛЯ РАСЧЕТА СФИРАЛИ В 3D ПРОСТРАНСТВЕ
+        const voxel = SfiralCore.getVoxelPoint(t, sTime, userRotation.x, userRotation.y);
 
-        // Проекционный коэффициент под габариты экрана
+        // Масштабирование и финальная проекция на экран
         const radiusScale = Math.min(canvas.width, canvas.height) / 3.8;
         const screenX = cx + voxel.x * radiusScale;
-        const screenY = cy + voxel.y * radiusScale - (voxel.zOffset * squeeze * 32);
+        
+        // ВАЖНО: В этой версии ось высоты Z интегрирована внутрь матрицы ядра, 
+        // поэтому squeeze применяется к исходной глубине, делая наклон физически корректным
+        const screenY = cy + voxel.y * radiusScale - (t * squeeze * 32 * Math.cos(userRotation.x));
 
         let r, g, b, a;
 
         if (pixelData) {
-            // Точный маппинг 3D координат сфирали на 2D растр пикселей ввода (160x120) с учетом R_coil
-            // Сдвигаем координаты из диапазона [-R, +R] в [0, 2*R] и делим на общую ширину (2*R)
+            // Маппинг 3D-вокселей на 2D-растр
             let u = Math.floor(((voxel.x + currentR) / (currentR * 2)) * 160);
             let v = Math.floor(((voxel.y + currentR) / (currentR * 2)) * 120);
             
-            // Жесткое ограничение индексов матрицы пикселей
             u = Math.max(0, Math.min(159, u));
             v = Math.max(0, Math.min(119, v));
 
@@ -150,16 +198,13 @@ function runPipeline() {
             g = pixelData[idx + 1];
             b = pixelData[idx + 2];
             
-            // Физическая плотность: если пиксель абсолютно черный, воксель становится прозрачным
             const brightness = (r + g + b) / 3;
             a = brightness > 10 ? brightness / 255 : 0.05; 
         } else {
-            // Применение канонического градиента
             const demoColor = SfiralCore.getDemoColor(t);
             r = demoColor.r; g = demoColor.g; b = demoColor.b; a = demoColor.a;
         }
 
-        // Отрисовка скомпилированного вокселя
         if (a > 0.08) {
             gl.beginPath();
             let size = 3.5; 
@@ -167,7 +212,6 @@ function runPipeline() {
             gl.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
             gl.fill();
 
-            // Энергетическое свечение
             gl.shadowBlur = 8;
             gl.shadowColor = `rgba(${r}, ${g}, ${b}, 0.5)`;
             
@@ -175,15 +219,11 @@ function runPipeline() {
         }
     }
 
-    // Сброс тени
     gl.shadowBlur = 0;
-
     document.getElementById('telCount').innerText = activeVoxels;
-    document.getElementById('sysStatus').innerText = "СТАТУС: СФИРАЛЬНАЯ АДРЕСАЦИЯ АКТИВНА";
+    document.getElementById('sysStatus').innerText = isDragging ? "СТАТУС: ИНТЕРАКТИВНЫЙ АНАЛИЗ МАТРИЦЫ" : "СТАТУС: СФИРАЛЬНАЯ АДРЕСАЦИЯ АКТИВНА";
     
-    // Непрерывный конвейер вычислений
     requestAnimationFrame(runPipeline);
 }
 
-// Запуск топологического конвейера
 runPipeline();
