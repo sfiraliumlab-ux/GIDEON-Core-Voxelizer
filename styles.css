@@ -1,0 +1,214 @@
+:root {
+    --bg-deep: #030408;
+    --panel-bg: #090b11;
+    --border-node: #161b29;
+    --neon-cyan: #00ffcc;
+    --neon-pink: #d600ff;
+    --text-primary: #d1d5db;
+    --font-mono: 'Courier New', Courier, monospace;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Хедер */
+.gideon-header {
+    height: 60px;
+    background: var(--panel-bg);
+    border-bottom: 1px solid var(--border-node);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 25px;
+    box-sizing: border-box;
+}
+
+.logo-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo-box h1 {
+    font-size: 1.1rem;
+    margin: 0;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    background: linear-gradient(45deg, var(--neon-cyan), var(--neon-pink));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.pulse-node {
+    width: 8px;
+    height: 8px;
+    background-color: var(--neon-cyan);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--neon-cyan);
+    animation: pulse 1.8s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.9); opacity: 0.6; }
+    50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 15px var(--neon-cyan); }
+    100% { transform: scale(0.9); opacity: 0.6; }
+}
+
+.system-status {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: #4b5563;
+    border: 1px solid #1f2937;
+    padding: 5px 12px;
+    border-radius: 4px;
+}
+
+/* Рабочая область */
+.workspace {
+    display: flex;
+    flex-grow: 1;
+    height: calc(100vh - 60px);
+}
+
+.control-panel {
+    width: 320px;
+    background: var(--panel-bg);
+    border-right: 1px solid var(--border-node);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+    box-sizing: border-box;
+}
+
+.panel-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.section-tag {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: #4b5563;
+    letter-spacing: 1px;
+}
+
+.btn-cluster {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gideon-btn, .file-label {
+    background: #111422;
+    border: 1px solid var(--border-node);
+    color: #9ca3af;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.file-label input { display: none; }
+
+.gideon-btn:hover, .file-label:hover {
+    border-color: var(--neon-cyan);
+    color: #ffffff;
+    background: #151a30;
+}
+
+.gideon-btn.active {
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    background: rgba(0, 255, 204, 0.05);
+}
+
+.control-node {
+    background: rgba(255,255,255,0.01);
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.03);
+}
+
+.node-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    margin-bottom: 6px;
+    color: #9ca3af;
+}
+
+.node-meta span:last-child {
+    color: var(--neon-cyan);
+    font-family: var(--font-mono);
+}
+
+input[type="range"] {
+    width: 100%;
+    accent-color: var(--neon-cyan);
+}
+
+.buffer-box {
+    margin-top: auto;
+    border: 1px dashed var(--border-node);
+    padding: 10px;
+    border-radius: 6px;
+    text-align: center;
+}
+
+video, #bufferCanvas {
+    width: 100%;
+    max-height: 100px;
+    border-radius: 4px;
+    display: none;
+    margin-top: 5px;
+}
+
+/* Область вывода */
+.display-area {
+    flex-grow: 1;
+    position: relative;
+    background: radial-gradient(circle at center, #0a0d1a 0%, #020306 100%);
+}
+
+#viewportCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.telemetry-panel {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(9, 11, 17, 0.8);
+    border: 1px solid var(--border-node);
+    backdrop-filter: blur(8px);
+    padding: 15px;
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+}
+
+.glow-text {
+    color: var(--neon-cyan);
+    text-shadow: 0 0 8px rgba(0,255,204,0.4);
+}
