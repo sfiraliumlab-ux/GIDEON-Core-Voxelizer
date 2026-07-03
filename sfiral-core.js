@@ -1,54 +1,85 @@
 /**
  * GIDEON-Core Математический модуль декомпозиции
- * Архитектура "Сфирали Времени" на базе золотого сечения
+ * ПОДЛИННАЯ ГЕОМЕТРИЯ СФИРАЛИ (Перенос из Blender-скрипта автора)
  */
 
 const SfiralCore = {
-    // Константа золотого сечения
-    PHI: (1 + Math.sqrt(5)) / 2,
+    // Настройки масштабирования под холст
+    R_coil: 1.8,       // Радиус основного витка
+    Height_Coil: 1.2,  // Высота витковой части
+    Height_S: 0.4,     // Высота S-перехода
 
     /**
-     * Вычисляет пространственные координаты 3D вокселя на основе шага s
-     * @param {number} s - Сфиральное время (шаг по оси)
-     * @param {number} time - Динамическое смещение фазы (анимация)
+     * Генерирует точную точку Сфирали по параметру t от -1 до +1
+     * @param {number} t - Нормализованный параметр хода (от -1 до +1)
+     * @param {number} phase - Динамический сдвиг для анимации вращения
      * @returns {Object} {x, y, zOffset, isCenter}
      */
-    getVoxelPoint(s, time) {
-        // 1. Функция S-перехода (веса распределения витков)
-        // Логистическая функция сглаживания перехода через ноль
-        const psi = (1 / (1 + Math.exp(-3 * s))) * (Math.PI / 2);
-        const alpha = Math.cos(psi); // Вес витка V-
-        const beta = Math.sin(psi);  // Вес витка V+
+    getVoxelPoint(t, phase) {
+        // Запоминаем знак для применения антисимметрии в конце
+        const isLeft = t < 0;
+        
+        // Работаем с модулем t (строим ПРАВУЮ половину, как в скрипте Blender)
+        const absT = Math.abs(t); 
+        
+        let x = 0;
+        let y = 0;
+        let z = 0;
+        let isCenter = false;
 
-        // 2. Ветви правого и левого свития, модулированные золотым сечением (s * PHI)
-        const r_minus_x = Math.cos(2 * Math.PI * s * this.PHI + time);
-        const r_minus_y = Math.sin(2 * Math.PI * s * this.PHI + time);
+        const R_arc = this.R_coil / 2.0;
+        const sArcRatio = 0.3; // 30% диапазона отдано под S-дугу
 
-        const r_plus_x = Math.cos(2 * Math.PI * s * this.PHI - time);
-        const r_plus_y = -Math.sin(2 * Math.PI * s * this.PHI - time);
+        if (absT <= sArcRatio) {
+            // --- ЧАСТЬ 1: ПОЛУОКРУЖНОСТЬ (S-Дуга) ---
+            isCenter = true;
+            // Нормализуем локальный шаг внутри дуги от 0 до 1
+            const localT = absT / sArcRatio;
+            const phi = Math.PI * (1 - localT);
 
-        // 3. Интерполяция встречных траекторий ядра
-        // Сфиральное расширение радиуса по мере удаления от центра (|s| * 0.18)
-        const expansion = 1 + 0.18 * Math.abs(s);
-        const x = (alpha * r_minus_x + beta * r_plus_x) * expansion;
-        const y = (alpha * r_minus_y + beta * r_plus_y) * expansion;
+            x = R_arc + R_arc * Math.cos(phi);
+            y = -R_arc * Math.sin(phi);
+            z = (this.Height_S / 2) * localT;
+        } else {
+            // --- ЧАСТЬ 2: ОСНОВНОЙ ВИТОК ---
+            // Нормализуем локальный шаг внутри витка от 0 до 1
+            const localT = (absT - sArcRatio) / (1.0 - sArcRatio);
+            const theta = 1.0 * 2 * Math.PI * localT; // Turns = 1.0
 
-        // Флаг нахождения в критической точке инверсии (S-узел)
-        const isCenter = Math.abs(s) < 0.15;
+            x = this.R_coil * Math.cos(theta);
+            y = this.R_coil * Math.sin(theta);
+            z = (this.Height_S / 2) + (this.Height_Coil * localT);
+        }
 
-        return { x, y, zOffset: s, isCenter };
+        // --- АНТИСИММЕТРИЯ: P_left = -P_right ---
+        if (isLeft) {
+            x = -x;
+            y = -y;
+            z = -z;
+        }
+
+        // Внедрение динамической фазы вращения (трансформация вокруг оси Z)
+        const rotatedX = x * Math.cos(phase) - y * Math.sin(phase);
+        const rotatedY = x * Math.sin(phase) + y * Math.cos(phase);
+
+        return {
+            x: rotatedX,
+            y: rotatedY,
+            zOffset: z,
+            isCenter: isCenter
+        };
     },
 
     /**
-     * Вычисляет базовое цветовое кодирование каркаса для демо-режима
+     * Спектральный анализ цвета для демо-режима
      */
-    getDemoColor(s) {
-        if (Math.abs(s) < 0.15) {
-            return { r: 0, g: 255, b: 204, a: 1 }; // Неоновый S-узел
-        } else if (s < 0) {
-            return { r: 31, g: 119, b: 180, a: 0.4 + (s / 10) }; // Виток V- (Синий)
+    getDemoColor(t) {
+        if (Math.abs(t) < 0.1) {
+            return { r: 0, g: 255, b: 204, a: 1 }; // S-узел (Яркий Неон)
+        } else if (t < 0) {
+            return { r: 31, g: 119, b: 180, a: 0.85 }; // Левый виток V- (Синий)
         } else {
-            return { r: 214, g: 39, b: 40, a: 0.4 - (s / 10) };  // Виток V+ (Красный)
+            return { r: 214, g: 39, b: 40, a: 0.85 };  // Правый виток V+ (Красный)
         }
     }
 };
