@@ -115,7 +115,7 @@ function runPipeline() {
 
     // Генерация дискретных пространственных вокселей Сфирали
     for (let i = 0; i < density; i++) {
-        // Шаг нормализован строго от -1.0 до +1.0 для исключения дублирования витков
+        // Шаг t строго от -1.0 до +1.0 для корректной развертки
         let t = (i / (density - 1)) * 2 - 1;
 
         // Вызов подлинной сфиральной точки из математического ядра
@@ -153,21 +153,23 @@ function runPipeline() {
         // Отрисовка скомпилированного вокселя
         if (a > 0.08) {
             gl.beginPath();
-            let size = voxel.isCenter ? 6 : 3.5;
+            
+            // УДАЛЕНО УВЕЛИЧЕНИЕ ЦЕНТРА: Теперь все точки одинаковой толщины (3.5)
+            let size = 3.5; 
             gl.arc(screenX, screenY, size, 0, 2 * Math.PI);
             gl.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
             gl.fill();
 
-            // Энергетическое свечение в области фазовой инверсии (s=0)
-            if (voxel.isCenter) {
-                gl.shadowBlur = 15;
-                gl.shadowColor = "rgba(0, 255, 204, 0.8)";
-            } else {
-                gl.shadowBlur = 0;
-            }
+            // МЯГКОЕ СВЕЧЕНИЕ: Теперь цвет тени строго соответствует фазовому градиенту точки, а не принудительному бирюзовому
+            gl.shadowBlur = 8;
+            gl.shadowColor = `rgba(${r}, ${g}, ${b}, 0.5)`;
+            
             activeVoxels++;
         }
     }
+
+    // Сброс тени, чтобы она не ломала другие элементы интерфейса
+    gl.shadowBlur = 0;
 
     document.getElementById('telCount').innerText = activeVoxels;
     document.getElementById('sysStatus').innerText = "СТАТУС: ПОДЛИННАЯ СФИРАЛЬНАЯ АДРЕСАЦИЯ АКТИВНА";
