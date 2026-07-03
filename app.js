@@ -86,7 +86,7 @@ fileLoad.addEventListener('change', (e) => {
 // --- ГЛАВНЫЙ ЦИКЛ РЕНДЕРИНГА И ДЕКОМПОЗИЦИИ ---
 
 function runPipeline() {
-    // Очистка экрана
+    // Очистка экрана перед новым кадром
     gl.clearRect(0, 0, canvas.width, canvas.height);
     
     const cx = canvas.width / 2;
@@ -94,14 +94,15 @@ function runPipeline() {
     const density = parseInt(rngDensity.value);
     const squeeze = parseInt(rngSqueeze.value) / 10;
     
-    // Обновление интерфейса управления
+    // Интеграция значений с ползунков управления
     document.getElementById('txtDensity').innerText = density;
     document.getElementById('txtSqueeze').innerText = squeeze.toFixed(1);
 
+    // Вращение Сфирали по фазе времени
     sTime += 0.006;
     document.getElementById('telTime').innerText = sTime.toFixed(4);
 
-    // Извлечение пикселей из буфера при наличии медиапотока
+    // Получение растровых данных из буферов ввода
     let pixelData = null;
     if (currentMode === 'camera' && webcam.readyState === webcam.HAVE_CURRENT_DATA) {
         bCtx.drawImage(webcam, 0, 0, 160, 120);
@@ -112,26 +113,25 @@ function runPipeline() {
 
     let activeVoxels = 0;
 
-    // Цикл пространственного распределения по сфирали
+    // Генерация дискретных пространственных вокселей Сфирали
     for (let i = 0; i < density; i++) {
-        // Шаг t строго от -1.0 до +1.0 для корректной развертки
+        // Шаг нормализован строго от -1.0 до +1.0 для исключения дублирования витков
         let t = (i / (density - 1)) * 2 - 1;
 
-        // Получение точной 3D точки Сфирали из обновленного математического ядра автора
+        // Вызов подлинной сфиральной точки из математического ядра
         const voxel = SfiralCore.getVoxelPoint(t, sTime);
 
-        // Проекция 3D -> 2D экрана
-        const radiusScale = Math.min(canvas.width, canvas.height) / 3.4;
+        // Проекционный коэффициент под габариты экрана
+        const radiusScale = Math.min(canvas.width, canvas.height) / 3.8;
         const screenX = cx + voxel.x * radiusScale;
-        const screenY = cy + voxel.y * radiusScale - (voxel.zOffset * squeeze * 28);
+        const screenY = cy + voxel.y * radiusScale - (voxel.zOffset * squeeze * 32);
 
-        // Определение цвета вокселя
         let r, g, b, a;
 
         if (pixelData) {
-            // Маппинг 3D координат сфирали на 2D сетку пикселей буфера (160x120)
-            let u = Math.floor(((voxel.x + 1.5) / 3) * 160);
-            let v = Math.floor(((voxel.y + 1.5) / 3) * 120);
+            // Ортогональный маппинг 3D каркаса Сфирали на 2D растр пикселей ввода (160x120)
+            let u = Math.floor(((voxel.x + 1.8) / 3.6) * 160);
+            let v = Math.floor(((voxel.y + 1.8) / 3.6) * 120);
             
             u = Math.max(0, Math.min(159, u));
             v = Math.max(0, Math.min(119, v));
@@ -141,27 +141,27 @@ function runPipeline() {
             g = pixelData[idx + 1];
             b = pixelData[idx + 2];
             
-            // Альфа-канал зависит от спектральной яркости пикселя
+            // Плотность вокселя определяется спектральной яркостью кадра
             const brightness = (r + g + b) / 3;
             a = brightness / 255;
         } else {
-            // Цвета по умолчанию из демо-каркаса
+            // Применение канонического цветового кодирования (Синий виток, Красный виток, Неоновый S-мост)
             const demoColor = SfiralCore.getDemoColor(t);
             r = demoColor.r; g = demoColor.g; b = demoColor.b; a = demoColor.a;
         }
 
-        // Рендеринг активного вокселя
+        // Отрисовка скомпилированного вокселя
         if (a > 0.08) {
             gl.beginPath();
-            let size = voxel.isCenter ? 5.5 : 3.5;
+            let size = voxel.isCenter ? 6 : 3.5;
             gl.arc(screenX, screenY, size, 0, 2 * Math.PI);
             gl.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
             gl.fill();
 
-            // Эффект свечения для S-узла (центра инверсии)
+            // Энергетическое свечение в области фазовой инверсии (s=0)
             if (voxel.isCenter) {
-                gl.shadowBlur = 12;
-                gl.shadowColor = "rgba(0, 255, 204, 0.7)";
+                gl.shadowBlur = 15;
+                gl.shadowColor = "rgba(0, 255, 204, 0.8)";
             } else {
                 gl.shadowBlur = 0;
             }
@@ -170,10 +170,11 @@ function runPipeline() {
     }
 
     document.getElementById('telCount').innerText = activeVoxels;
-    document.getElementById('sysStatus').innerText = "СТАТУС: СФИРАЛЬНАЯ АДРЕСАЦИЯ АКТИВНА";
+    document.getElementById('sysStatus').innerText = "СТАТУС: ПОДЛИННАЯ СФИРАЛЬНАЯ АДРЕСАЦИЯ АКТИВНА";
     
+    // Непрерывный конвейер вычислений
     requestAnimationFrame(runPipeline);
 }
 
-// Старт конвейера
+// Запуск топологического конвейера
 runPipeline();
