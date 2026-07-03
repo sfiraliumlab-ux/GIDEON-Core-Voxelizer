@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIDEON Core Voxelize v2.0</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- Навигационная панель среды -->
+    <header class="gideon-header">
+        <div class="logo-box">
+            <span class="pulse-node"></span>
+            <h1>GIDEON // Core Voxelize</h1>
+        </div>
+        <div class="system-status" id="sysStatus">СТАТУС: ИНИЦИАЛИЗАЦИЯ МАТРИЦЫ</div>
+    </header>
+
+    <div class="workspace">
+        <!-- Левый блок: Модуль ввода и управления -->
+        <aside class="control-panel">
+            <section class="panel-section">
+                <div class="section-tag">Модуль 01 // Поток</div>
+                <div class="btn-cluster">
+                    <button id="btnCam" class="gideon-btn">Включить Сенсор (Камера)</button>
+                    <label class="gideon-btn file-label">
+                        Импорт Кадра
+                        <input type="file" id="fileLoad" accept="image/*">
+                    </label>
+                    <button id="btnDemo" class="gideon-btn active">Синтетический Паттерн</button>
+                </div>
+            </section>
+
+            <section class="panel-section">
+                <div class="section-tag">Модуль 02 // Контроллеры S-оси</div>
+                <div class="control-node">
+                    <div class="node-meta"><span>Плотность витков</span><span id="txtDensity">500</span></div>
+                    <input type="range" id="rngDensity" min="200" max="1500" value="500">
+                </div>
+                <div class="control-node">
+                    <div class="node-meta"><span>Шаг инверсии (S-Squeeze)</span><span id="txtSqueeze">1.5</span></div>
+                    <input type="range" id="rngSqueeze" min="5" max="40" value="15">
+                </div>
+            </section>
+
+            <!-- Буфер захвата пикселей -->
+            <div class="buffer-box">
+                <div class="section-tag">Входной Буфер Матрицы</div>
+                <video id="webcam" autoplay playsinline muted></video>
+                <canvas id="bufferCanvas" width="160" height="120"></canvas>
+            </div>
+        </aside>
+
+        <!-- Правый блок: Пространственный проектор -->
+        <main class="display-area">
+            <canvas id="viewportCanvas"></canvas>
+            
+            <!-- Модуль телеметрии -->
+            <div class="telemetry-panel">
+                <div class="tel-row">РЕЖИМ ИНДЕКСАЦИИ: <span id="telMode" class="glow-text">DEMO_MATRIX</span></div>
+                <div class="tel-row">ТЕКУЩЕЕ ВРЕМЯ s: <span id="telTime">0.0000</span></div>
+                <div class="tel-row">АКТИВНЫХ ВОКСЕЛЕЙ: <span id="telCount" class="glow-text">0</span></div>
+                <div class="tel-row">ИНВАРИАНТ ЗОЛОТОГО СЕЧЕНИЯ Φ: <span>1.618033</span></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Подключение модулей архитектуры -->
+    <script src="sfiral-core.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
