@@ -65,7 +65,7 @@ btnCam.addEventListener('click', async () => {
 
 // Режим загрузки файла
 fileLoad.addEventListener('change', (e) => {
-    const file = e.target.files;
+    const file = e.target.files[0]; // Исправлено для корректного захвата одного файла
     if (!file) return;
     
     const reader = new FileReader();
@@ -75,6 +75,8 @@ fileLoad.addEventListener('change', (e) => {
             loadedImgElement = img;
             bufferCanvas.style.display = 'block';
             webcam.style.display = 'none';
+            // Отрисовываем картинку во внутренний буфер
+            bCtx.clearRect(0, 0, 160, 120);
             bCtx.drawImage(img, 0, 0, 160, 120);
             setMode('file', 'file_buffer');
         };
@@ -108,10 +110,15 @@ function runPipeline() {
         bCtx.drawImage(webcam, 0, 0, 160, 120);
         pixelData = bCtx.getImageData(0, 0, 160, 120).data;
     } else if (currentMode === 'file' && loadedImgElement) {
+        // Постоянно обновляем буфер кадра для стабильного считывания
+        bCtx.drawImage(loadedImgElement, 0, 0, 160, 120);
         pixelData = bCtx.getImageData(0, 0, 160, 120).data;
     }
 
     let activeVoxels = 0;
+
+    // Считываем радиус из математического ядра (по умолчанию 1.8)
+    const currentR = SfiralCore.R_coil || 1.8;
 
     // Генерация дискретных пространственных вокселей Сфирали
     for (let i = 0; i < density; i++) {
@@ -129,10 +136,12 @@ function runPipeline() {
         let r, g, b, a;
 
         if (pixelData) {
-            // Ортогональный маппинг 3D каркаса Сфирали на 2D растр пикселей ввода (160x120)
-            let u = Math.floor(((voxel.x + 1.8) / 3.6) * 160);
-            let v = Math.floor(((voxel.y + 1.8) / 3.6) * 120);
+            // Точный маппинг 3D координат сфирали на 2D растр пикселей ввода (160x120) с учетом R_coil
+            // Сдвигаем координаты из диапазона [-R, +R] в [0, 2*R] и делим на общую ширину (2*R)
+            let u = Math.floor(((voxel.x + currentR) / (currentR * 2)) * 160);
+            let v = Math.floor(((voxel.y + currentR) / (currentR * 2)) * 120);
             
+            // Жесткое ограничение индексов матрицы пикселей
             u = Math.max(0, Math.min(159, u));
             v = Math.max(0, Math.min(119, v));
 
@@ -141,11 +150,11 @@ function runPipeline() {
             g = pixelData[idx + 1];
             b = pixelData[idx + 2];
             
-            // Плотность вокселя определяется спектральной яркостью кадра
+            // Физическая плотность: если пиксель абсолютно черный, воксель становится прозрачным
             const brightness = (r + g + b) / 3;
-            a = brightness / 255;
+            a = brightness > 10 ? brightness / 255 : 0.05; 
         } else {
-            // Применение канонического цветового кодирования (Синий виток, Красный виток, Неоновый S-мост)
+            // Применение канонического градиента
             const demoColor = SfiralCore.getDemoColor(t);
             r = demoColor.r; g = demoColor.g; b = demoColor.b; a = demoColor.a;
         }
@@ -153,14 +162,12 @@ function runPipeline() {
         // Отрисовка скомпилированного вокселя
         if (a > 0.08) {
             gl.beginPath();
-            
-            // УДАЛЕНО УВЕЛИЧЕНИЕ ЦЕНТРА: Теперь все точки одинаковой толщины (3.5)
             let size = 3.5; 
             gl.arc(screenX, screenY, size, 0, 2 * Math.PI);
             gl.fillStyle = `rgba(${r}, ${g}, ${b}, ${a})`;
             gl.fill();
 
-            // МЯГКОЕ СВЕЧЕНИЕ: Теперь цвет тени строго соответствует фазовому градиенту точки, а не принудительному бирюзовому
+            // Энергетическое свечение
             gl.shadowBlur = 8;
             gl.shadowColor = `rgba(${r}, ${g}, ${b}, 0.5)`;
             
@@ -168,11 +175,11 @@ function runPipeline() {
         }
     }
 
-    // Сброс тени, чтобы она не ломала другие элементы интерфейса
+    // Сброс тени
     gl.shadowBlur = 0;
 
     document.getElementById('telCount').innerText = activeVoxels;
-    document.getElementById('sysStatus').innerText = "СТАТУС: ПОДЛИННАЯ СФИРАЛЬНАЯ АДРЕСАЦИЯ АКТИВНА";
+    document.getElementById('sysStatus').innerText = "СТАТУС: СФИРАЛЬНАЯ АДРЕСАЦИЯ АКТИВНА";
     
     // Непрерывный конвейер вычислений
     requestAnimationFrame(runPipeline);
