@@ -10,6 +10,7 @@ const bCtx = bufferCanvas.getContext('2d');
 const webcam = document.getElementById('webcam');
 
 const btnCam = document.getElementById('btnCam');
+const btnSnap = document.getElementById('btnSnap');
 const btnDemo = document.getElementById('btnDemo');
 const fileLoad = document.getElementById('fileLoad');
 
@@ -70,6 +71,7 @@ btnDemo.addEventListener('click', () => {
     btnDemo.classList.add('active');
     webcam.style.display = 'none';
     bufferCanvas.style.display = 'none';
+    btnSnap.style.display = 'none';
     if (webcam.srcObject) {
         webcam.srcObject.getTracks().forEach(t => t.stop());
     }
@@ -77,24 +79,36 @@ btnDemo.addEventListener('click', () => {
 
 btnCam.addEventListener('click', async () => {
     try {
-        // Запрос видеопотока с жестким указанием флагов доверия
         const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { width: 160, height: 120, facingMode: "user" } 
+            video: { width: 160, height: 120 } 
         });
         
         webcam.srcObject = stream;
-        // Принудительно отключаем блокировки на теге видео
-        webcam.setAttribute('playsinline', true);
-        webcam.setAttribute('muted', true);
-        webcam.crossOrigin = "anonymous";
-        webcam.play();
-
         webcam.style.display = 'block';
         bufferCanvas.style.display = 'none';
+        btnSnap.style.display = 'block'; // Показываем кнопку захвата кадра
         setMode('camera', 'sensor_stream');
         btnCam.classList.add('active');
     } catch (err) {
         document.getElementById('sysStatus').innerText = "ОШИБКА: НЕТ ДОСТУПА К СЕНСОРУ";
+    }
+});
+
+// ЛОГИКА ЖЕСТКОГО ОБХОДА CORS БЛОКИРОВКИ: Превращаем живой поток в чистый снимок памяти
+btnSnap.addEventListener('click', () => {
+    if (webcam.readyState >= 2) {
+        bCtx.clearRect(0, 0, 160, 120);
+        bCtx.drawImage(webcam, 0, 0, 160, 120);
+        
+        // Создаем из буфера независимый графический объект, полностью легальный для браузера
+        const img = new Image();
+        img.onload = () => {
+            loadedImgElement = img;
+            bufferCanvas.style.display = 'block';
+            webcam.style.display = 'none';
+            setMode('file', 'sensor_snapshot'); // Переводим ядро в режим обработки этого снимка
+        };
+        img.src = bufferCanvas.toDataURL('image/png'); // Извлекаем данные в виде безопасной строки
     }
 });
 
@@ -105,11 +119,11 @@ fileLoad.addEventListener('change', (e) => {
     const reader = new FileReader();
     reader.onload = (event) => {
         const img = new Image();
-        img.crossOrigin = "anonymous";
         img.onload = () => {
             loadedImgElement = img;
             bufferCanvas.style.display = 'block';
             webcam.style.display = 'none';
+            btnSnap.style.display = 'none';
             bCtx.clearRect(0, 0, 160, 120);
             bCtx.drawImage(img, 0, 0, 160, 120);
             setMode('file', 'file_buffer');
@@ -137,13 +151,8 @@ function runPipeline() {
 
     let pixelData = null;
     
-    // БЕЗОПАСНЫЙ ПЕРЕХАТ ПИКСЕЛЕЙ ЧЕРЕЗ АКТИВНЫЙ БУФЕР КАНАЛА
-    if (currentMode === 'camera' && webcam.readyState >= 2) { 
-        bCtx.clearRect(0, 0, 160, 120);
-        // Рисуем кадр в буфер (это очищает статус безопасности потока)
-        bCtx.drawImage(webcam, 0, 0, 160, 120);
-        pixelData = bCtx.getImageData(0, 0, 160, 120).data;
-    } else if (currentMode === 'file' && loadedImgElement) {
+    // Стабильное считывание пикселей из подтвержденных, безопасных источников
+    if (currentMode === 'file' && loadedImgElement) {
         bCtx.clearRect(0, 0, 160, 120);
         bCtx.drawImage(loadedImgElement, 0, 0, 160, 120);
         pixelData = bCtx.getImageData(0, 0, 160, 120).data;
@@ -163,9 +172,7 @@ function runPipeline() {
 
         let r, g, b, a;
 
-        // Если буфер пикселей существует и он не пустой (проверка на Tainted Canvas)
-        if (pixelData && pixelData[0] !== undefined) {
-            // Зеркально разворачиваем U координату, чтобы движения камеры были интуитивными (как в зеркале)
+        if (pixelData && pixelData !== undefined && pixelData.length > 0) {
             let u = Math.floor(((currentR - voxel.x) / (currentR * 2)) * 160);
             let v = Math.floor(((voxel.y + currentR) / (currentR * 2)) * 120);
             
@@ -176,16 +183,14 @@ function runPipeline() {
             r = pixelData[idx];
             g = pixelData[idx + 1];
             b = pixelData[idx + 2];
-            a = pixelData[idx + 3] / 255;
+            a = 1.0; 
             
-            // Если пиксель слишком темный, даем легкий базовый силуэт, чтобы нить не исчезала
             const brightness = (r + g + b) / 3;
             if (brightness < 15) {
                 const demoColor = SfiralCore.getDemoColor(t);
-                r = demoColor.r; g = demoColor.g; b = demoColor.b; a = 0.2; // Полупрозрачный каркас в темноте
+                r = demoColor.r; g = demoColor.g; b = demoColor.b; a = 0.2; 
             }
         } else {
-            // Демонстрационный градиент
             const demoColor = SfiralCore.getDemoColor(t);
             r = demoColor.r; g = demoColor.g; b = demoColor.b; a = demoColor.a;
         }
