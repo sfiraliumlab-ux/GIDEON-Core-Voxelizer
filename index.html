@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GIDEON Core Voxelize v2.5</title>
+    <title>GIDEON Core Voxelize v3.0</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -24,7 +24,6 @@
                 <div class="section-tag">Модуль 01 // Поток</div>
                 <div class="btn-cluster">
                     <button id="btnCam" class="gideon-btn">Включить Сенсор (Камера)</button>
-                    <!-- НОВАЯ КНОПКА ДЛЯ ПРОБИВАНИЯ БЛОКИРОВКИ БРАУЗЕРА -->
                     <button id="btnSnap" class="gideon-btn" style="border-color: #bd00ff; display: none;">Захват снимка в Сфираль</button>
                     <label class="gideon-btn file-label">
                         Импорт Кадра
@@ -44,6 +43,12 @@
                     <div class="node-meta"><span>Шаг инверсии (S-Squeeze)</span><span id="txtSqueeze">1.5</span></div>
                     <input type="range" id="rngSqueeze" min="5" max="40" value="15">
                 </div>
+            </section>
+
+            <!-- НОВЫЙ МОДУЛЬ ЭКСПОРТА ДЛЯ BLENDER -->
+            <section class="panel-section">
+                <div class="section-tag">Модуль 03 // Выходной файл</div>
+                <button id="btnExport" class="gideon-btn" style="border-color: #00ffcc; font-weight: bold;">Экспорт Матрицы в OBJ</button>
             </section>
 
             <!-- Буфер захвата пикселей -->
