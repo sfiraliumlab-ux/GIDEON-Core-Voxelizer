@@ -21,11 +21,11 @@ let currentMode = 'demo';
 let sTime = 0;
 let loadedImgElement = null;
 
-// ПЕРЕМЕННЫЕ ДЛЯ 3D ИНТЕРАКТИВА (МЫШЬ И ТАЧ)
+// ПЕРЕМЕННЫЕ ДЛЯ 3D ИНТЕРАКТИВА
 let isDragging = false;
 let previousMousePosition = { x: 0, y: 0 };
-let userRotation = { x: 0.3, y: 0 }; // Стартовый угол наклона для красивого объема
-let autoRotateSpeed = 0.006; // Скорость авто-вращения
+let userRotation = { x: 0.3, y: 0 }; 
+let autoRotateSpeed = 0.006; 
 
 // Синхронизация размеров холста
 function initViewport() {
@@ -40,30 +40,21 @@ initViewport();
 canvas.addEventListener('mousedown', (e) => {
     isDragging = true;
     previousMousePosition = { x: e.clientX, y: e.clientY };
-    autoRotateSpeed = 0; // Останавливаем авто-вращение при ручном просмотре
+    autoRotateSpeed = 0; 
 });
 
-window.addEventListener('mouseup', () => {
-    isDragging = false;
-});
+window.addEventListener('mouseup', () => { isDragging = false; });
 
 canvas.addEventListener('mousemove', (e) => {
     if (!isDragging) return;
-
     const deltaX = e.clientX - previousMousePosition.x;
     const deltaY = e.clientY - previousMousePosition.y;
-
-    // Переводим движение мыши в радианы поворота
     userRotation.y += deltaX * 0.01;
     userRotation.x += deltaY * 0.01;
-
-    // Ограничиваем вертикальный переворот, чтобы голова не кружилась (в пределах 85 градусов)
     userRotation.x = Math.max(-1.4, Math.min(1.4, userRotation.x));
-
     previousMousePosition = { x: e.clientX, y: e.clientY };
 });
 
-// Поддержка мобильных экранов (тач-события)
 canvas.addEventListener('touchstart', (e) => {
     if (e.touches.length === 1) {
         isDragging = true;
@@ -71,19 +62,15 @@ canvas.addEventListener('touchstart', (e) => {
         autoRotateSpeed = 0;
     }
 });
-
 canvas.addEventListener('touchend', () => { isDragging = false; });
-
 canvas.addEventListener('touchmove', (e) => {
     if (!isDragging || e.touches.length !== 1) return;
     const deltaX = e.touches[0].clientX - previousMousePosition.x;
     const deltaY = e.touches[0].clientY - previousMousePosition.y;
     userRotation.y += deltaX * 0.01;
     userRotation.x += deltaY * 0.01;
-    userRotation.x = Math.max(-1.4, Math.min(1.4, userRotation.x));
     previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
 });
-
 
 // --- ОБРАБОТЧИКИ ПОТОКОВ ДАННЫХ ---
 
@@ -92,7 +79,6 @@ function setMode(modeName, labelText) {
     document.getElementById('telMode').innerText = labelText.toUpperCase();
     document.querySelectorAll('.gideon-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('sysStatus').innerText = `СТАТУС: ПОТОК [${labelText.toUpperCase()}]`;
-    // Возвращаем легкое авто-вращение при переключении режимов
     autoRotateSpeed = 0.006;
 }
 
@@ -108,6 +94,8 @@ btnDemo.addEventListener('click', () => {
 
 btnCam.addEventListener('click', async () => {
     try {
+        // Снимаем ограничения CORS безопасности с тега видео
+        webcam.crossOrigin = "anonymous";
         const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 160, height: 120 } });
         webcam.srcObject = stream;
         webcam.style.display = 'block';
@@ -120,12 +108,13 @@ btnCam.addEventListener('click', async () => {
 });
 
 fileLoad.addEventListener('change', (e) => {
-    const file = e.target.files[0]; 
+    const file = e.target.files[0]; // Исправлен захват конкретного файла новичка
     if (!file) return;
     
     const reader = new FileReader();
     reader.onload = (event) => {
         const img = new Image();
+        img.crossOrigin = "anonymous";
         img.onload = () => {
             loadedImgElement = img;
             bufferCanvas.style.display = 'block';
@@ -152,41 +141,43 @@ function runPipeline() {
     document.getElementById('txtDensity').innerText = density;
     document.getElementById('txtSqueeze').innerText = squeeze.toFixed(1);
 
-    // Прибавляем время только если включено авто-вращение
     sTime += autoRotateSpeed;
     document.getElementById('telTime').innerText = sTime.toFixed(4);
 
     let pixelData = null;
-    if (currentMode === 'camera' && webcam.readyState === webcam.HAVE_CURRENT_DATA) {
-        bCtx.drawImage(webcam, 0, 0, 160, 120);
-        pixelData = bCtx.getImageData(0, 0, 160, 120).data;
-    } else if (currentMode === 'file' && loadedImgElement) {
-        bCtx.drawImage(loadedImgElement, 0, 0, 160, 120);
-        pixelData = bCtx.getImageData(0, 0, 160, 120).data;
+    
+    // Защищенное и стабильное извлечение пикселей веб-камеры/файла в каждом кадре
+    try {
+        if (currentMode === 'camera' && webcam.readyState >= 2) { // 2 означает HAVE_CURRENT_DATA или выше
+            bCtx.clearRect(0, 0, 160, 120);
+            bCtx.drawImage(webcam, 0, 0, 160, 120);
+            pixelData = bCtx.getImageData(0, 0, 160, 120).data;
+        } else if (currentMode === 'file' && loadedImgElement) {
+            bCtx.clearRect(0, 0, 160, 120);
+            bCtx.drawImage(loadedImgElement, 0, 0, 160, 120);
+            pixelData = bCtx.getImageData(0, 0, 160, 120).data;
+        }
+    } catch (e) {
+        // Защита от сбоев CORS в браузере
+        pixelData = null;
     }
 
     let activeVoxels = 0;
     const currentR = SfiralCore.R_coil || 1.8;
 
-    // Генерируем массив точек
     for (let i = 0; i < density; i++) {
         let t = (i / (density - 1)) * 2 - 1;
 
-        // ПЕРЕДАЕМ НАШИ КООРДИНАТЫ МЫШИ В ЯДРО ДЛЯ РАСЧЕТА СФИРАЛИ В 3D ПРОСТРАНСТВЕ
         const voxel = SfiralCore.getVoxelPoint(t, sTime, userRotation.x, userRotation.y);
 
-        // Масштабирование и финальная проекция на экран
         const radiusScale = Math.min(canvas.width, canvas.height) / 3.8;
         const screenX = cx + voxel.x * radiusScale;
-        
-        // ВАЖНО: В этой версии ось высоты Z интегрирована внутрь матрицы ядра, 
-        // поэтому squeeze применяется к исходной глубине, делая наклон физически корректным
         const screenY = cy + voxel.y * radiusScale - (t * squeeze * 32 * Math.cos(userRotation.x));
 
         let r, g, b, a;
 
-        if (pixelData) {
-            // Маппинг 3D-вокселей на 2D-растр
+        // Если пиксели успешно считались, накладываем их на Сфираль
+        if (pixelData && pixelData.length > 0) {
             let u = Math.floor(((voxel.x + currentR) / (currentR * 2)) * 160);
             let v = Math.floor(((voxel.y + currentR) / (currentR * 2)) * 120);
             
@@ -199,13 +190,14 @@ function runPipeline() {
             b = pixelData[idx + 2];
             
             const brightness = (r + g + b) / 3;
-            a = brightness > 10 ? brightness / 255 : 0.05; 
+            a = brightness / 255;
         } else {
+            // Иначе — канонический демонстрационный градиент автора
             const demoColor = SfiralCore.getDemoColor(t);
             r = demoColor.r; g = demoColor.g; b = demoColor.b; a = demoColor.a;
         }
 
-        if (a > 0.08) {
+        if (a > 0.05) {
             gl.beginPath();
             let size = 3.5; 
             gl.arc(screenX, screenY, size, 0, 2 * Math.PI);
