@@ -1,5 +1,5 @@
 /**
- * GIDEON Core Voxelize — Главный координатор приложения c 3D-интерактивностью
+ * GIDEON Core Voxelize — Главный координатор приложения c 3D-интерактивностью и экспортом
  */
 
 // Селекторы элементов DOM
@@ -13,6 +13,7 @@ const btnCam = document.getElementById('btnCam');
 const btnSnap = document.getElementById('btnSnap');
 const btnDemo = document.getElementById('btnDemo');
 const fileLoad = document.getElementById('fileLoad');
+const btnExport = document.getElementById('btnExport');
 
 const rngDensity = document.getElementById('rngDensity');
 const rngSqueeze = document.getElementById('rngSqueeze');
@@ -79,14 +80,11 @@ btnDemo.addEventListener('click', () => {
 
 btnCam.addEventListener('click', async () => {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { width: 160, height: 120 } 
-        });
-        
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 160, height: 120 } });
         webcam.srcObject = stream;
         webcam.style.display = 'block';
         bufferCanvas.style.display = 'none';
-        btnSnap.style.display = 'block'; // Показываем кнопку захвата кадра
+        btnSnap.style.display = 'block'; 
         setMode('camera', 'sensor_stream');
         btnCam.classList.add('active');
     } catch (err) {
@@ -94,26 +92,24 @@ btnCam.addEventListener('click', async () => {
     }
 });
 
-// ЛОГИКА ЖЕСТКОГО ОБХОДА CORS БЛОКИРОВКИ: Превращаем живой поток в чистый снимок памяти
 btnSnap.addEventListener('click', () => {
     if (webcam.readyState >= 2) {
         bCtx.clearRect(0, 0, 160, 120);
         bCtx.drawImage(webcam, 0, 0, 160, 120);
         
-        // Создаем из буфера независимый графический объект, полностью легальный для браузера
         const img = new Image();
         img.onload = () => {
             loadedImgElement = img;
             bufferCanvas.style.display = 'block';
             webcam.style.display = 'none';
-            setMode('file', 'sensor_snapshot'); // Переводим ядро в режим обработки этого снимка
+            setMode('file', 'sensor_snapshot'); 
         };
-        img.src = bufferCanvas.toDataURL('image/png'); // Извлекаем данные в виде безопасной строки
+        img.src = bufferCanvas.toDataURL('image/png'); 
     }
 });
 
 fileLoad.addEventListener('change', (e) => {
-    const file = e.target.files[0]; 
+    const file = e.target.files; 
     if (!file) return;
     
     const reader = new FileReader();
@@ -150,8 +146,6 @@ function runPipeline() {
     document.getElementById('telTime').innerText = sTime.toFixed(4);
 
     let pixelData = null;
-    
-    // Стабильное считывание пикселей из подтвержденных, безопасных источников
     if (currentMode === 'file' && loadedImgElement) {
         bCtx.clearRect(0, 0, 160, 120);
         bCtx.drawImage(loadedImgElement, 0, 0, 160, 120);
@@ -213,4 +207,70 @@ function runPipeline() {
     requestAnimationFrame(runPipeline);
 }
 
+// --- ФУНКЦИЯ ЭКСПОРТА МАТРИЦЫ В ФАЙЛ ДЛЯ BLENDER ---
+function exportToOBJ() {
+    const density = parseInt(rngDensity.value);
+    const squeeze = parseInt(rngSqueeze.value) / 10;
+    const currentR = SfiralCore.R_coil || 1.8;
+    
+    let pixelData = null;
+    if (currentMode === 'file' && loadedImgElement) {
+        pixelData = bCtx.getImageData(0, 0, 160, 120).data;
+    }
+
+    let objText = "# GIDEON Core Matrix Export\n# Топология Сфирали Времени\n";
+    
+    for (let i = 0; i < density; i++) {
+        let t = (i / (density - 1)) * 2 - 1;
+        
+        // Экспортируем статическую чистую Сфираль без учета вращения мыши пользователя
+        const voxel = SfiralCore.getVoxelPoint(t, 0, 0, 0); 
+        
+        // Интегрируем шаг S-Squeeze в чистую физическую координату Z
+        let x = voxel.x;
+        let y = voxel.y;
+        let z = t * squeeze;
+
+        let r = 0, g = 255, b = 204; // Дефолтные цвета
+
+        if (pixelData) {
+            let u = Math.floor(((currentR - voxel.x) / (currentR * 2)) * 160);
+            let v = Math.floor(((voxel.y + currentR) / (currentR * 2)) * 120);
+            u = Math.max(0, Math.min(159, u));
+            v = Math.max(0, Math.min(119, v));
+
+            const idx = (v * 160 + u) * 4;
+            r = pixelData[idx];
+            g = pixelData[idx + 1];
+            b = pixelData[idx + 2];
+        } else {
+            const demoColor = SfiralCore.getDemoColor(t);
+            r = demoColor.r; g = demoColor.g; b = demoColor.b;
+        }
+
+        // Переводим RGB в нормализованный вид для формата OBJ (от 0.0 до 1.0)
+        let rNorm = (r / 255).toFixed(4);
+        let gNorm = (g / 255).toFixed(4);
+        let bNorm = (b / 255).toFixed(4);
+
+        // Строка вершины в формате OBJ: v X Y Z R G B
+        objText += `v ${x.toFixed(4)} ${y.toFixed(4)} ${z.toFixed(4)} ${rNorm} ${gNorm} ${bNorm}\n`;
+    }
+
+    // Создаем ссылку для немедленного скачивания файла браузером
+    const blob = new Blob([objText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sfiral_matrix_${currentMode}_${Date.now()}.obj`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// Привязка функции экспорта к кнопке
+btnExport.addEventListener('click', exportToOBJ);
+
+// Старт
 runPipeline();
